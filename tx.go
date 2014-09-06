@@ -46,7 +46,7 @@ func (t *Tx) ReadAt(p []byte, off int64) (n int, err error) {
 		}
 
 		for _, _o := range _t.writes {
-			if conflicting(o, _o) {
+			if overlapping(o, _o) {
 				t.m.Unlock()
 				return 0, ERR_OVERLAP
 			}
@@ -88,14 +88,14 @@ func (t *Tx) WriteAt(p []byte, off int64) (n int, err error) {
 		}
 
 		for _, _o := range _t.writes {
-			if conflicting(o, _o) {
+			if overlapping(o, _o) {
 				t.m.Unlock()
 				return 0, ERR_OVERLAP
 			}
 		}
 
 		for _, _o := range _t.reads {
-			if conflicting(o, _o) {
+			if overlapping(o, _o) {
 				t.m.Unlock()
 				return 0, ERR_OVERLAP
 			}

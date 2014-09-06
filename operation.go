@@ -15,7 +15,7 @@ type boundable interface {
 	bounds() (uint64, uint64)
 }
 
-func conflicting(a, b boundable) bool {
+func overlapping(a, b boundable) bool {
 	a1, a2 := a.bounds()
 	b1, b2 := b.bounds()
 
