@@ -52,6 +52,20 @@ func main() {
 	if _, err := t.ReadAt(b, 0); err != nil {
 		log.Errorf("error: %s\n", err.Error())
 		os.Exit(1)
+	} else {
+		log.Debugf("read: %x\n", b)
+	}
+
+	if _, err := t.WriteAt([]byte("0000"), 0); err != nil {
+		log.Errorf("error: %s\n", err.Error())
+		os.Exit(1)
+	}
+
+	if _, err := t.ReadAt(b, 0); err != nil {
+		log.Errorf("error: %s\n", err.Error())
+		os.Exit(1)
+	} else {
+		log.Debugf("read: %x\n", b)
 	}
 
 	if err := t.Commit(); err != nil {

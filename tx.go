@@ -63,9 +63,33 @@ func (t *Tx) ReadAt(p []byte, off int64) (n int, err error) {
 
 	if err != nil {
 		return 0, err
-	} else {
-		return n, nil
 	}
+
+	for _, _o := range t.writes {
+		if !overlapping(o, _o) {
+			continue
+		}
+
+		var srcLower, dstLower, l uint64
+
+		if _o.Offset > o.Offset {
+			srcLower = _o.Offset - o.Offset
+			dstLower = 0
+		} else {
+			srcLower = 0
+			dstLower = o.Offset - _o.Offset
+		}
+
+		if _o.Length > o.Length {
+			l = o.Length
+		} else {
+			l = _o.Length
+		}
+
+		copy(p[dstLower:dstLower+l], _o.Data[srcLower:srcLower+l])
+	}
+
+	return n, nil
 }
 
 func (t *Tx) WriteAt(p []byte, off int64) (n int, err error) {
