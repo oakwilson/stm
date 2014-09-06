@@ -18,6 +18,11 @@ type Tx struct {
 
 	writes []*WriteOperation
 	reads  []*ReadOperation
+
+	laterLock sync.Mutex
+	later     []*Tx
+
+	completed bool
 }
 
 func NewTx(m *Manager) *Tx {
@@ -36,21 +41,20 @@ func (t *Tx) ReadAt(p []byte, off int64) (n int, err error) {
 	t.m.Lock()
 
 	if t.m.Version() != t.v {
-		t.m.Unlock()
-		return 0, ERR_EXPIRED
-	}
+		t.laterLock.Lock()
 
-	for _, _t := range t.m.Txs() {
-		if _t == t {
-			continue
-		}
+		for _, _t := range t.later {
+			for _, _o := range _t.writes {
+				if overlapping(o, _o) {
+					t.laterLock.Unlock()
+					t.m.Unlock()
 
-		for _, _o := range _t.writes {
-			if overlapping(o, _o) {
-				t.m.Unlock()
-				return 0, ERR_OVERLAP
+					return 0, ERR_EXPIRED
+				}
 			}
 		}
+
+		t.laterLock.Unlock()
 	}
 
 	t.Lock()
@@ -101,31 +105,6 @@ func (t *Tx) WriteAt(p []byte, off int64) (n int, err error) {
 
 	t.m.Lock()
 
-	if t.m.Version() != t.v {
-		t.m.Unlock()
-		return 0, ERR_EXPIRED
-	}
-
-	for _, _t := range t.m.Txs() {
-		if _t == t {
-			continue
-		}
-
-		for _, _o := range _t.writes {
-			if overlapping(o, _o) {
-				t.m.Unlock()
-				return 0, ERR_OVERLAP
-			}
-		}
-
-		for _, _o := range _t.reads {
-			if overlapping(o, _o) {
-				t.m.Unlock()
-				return 0, ERR_OVERLAP
-			}
-		}
-	}
-
 	t.Lock()
 	t.writes = append(t.writes, &o)
 	t.Unlock()
@@ -139,15 +118,47 @@ func (t *Tx) Commit() error {
 	t.m.Lock()
 	defer t.m.Unlock()
 
-	t.m.RemoveTx(t)
+	defer t.m.RemoveTx(t)
 
-	if t.m.Version() != t.v {
-		return ERR_EXPIRED
+	t.laterLock.Lock()
+
+	for _, _t := range t.later {
+		for _, o := range t.reads {
+			for _, _o := range _t.writes {
+				if overlapping(o, _o) {
+					t.laterLock.Unlock()
+
+					return ERR_EXPIRED
+				}
+			}
+		}
+
+		for _, o := range t.writes {
+			for _, _o := range _t.writes {
+				if overlapping(o, _o) {
+					t.laterLock.Unlock()
+
+					return ERR_OVERLAP
+				}
+			}
+
+			for _, _o := range _t.reads {
+				if overlapping(o, _o) {
+					t.laterLock.Unlock()
+
+					return ERR_OVERLAP
+				}
+			}
+		}
 	}
+
+	t.laterLock.Unlock()
 
 	if err := t.m.WriteV(t.writes...); err != nil {
 		return err
 	}
+
+	t.completed = true
 
 	t.m.Increment()
 
@@ -157,8 +168,7 @@ func (t *Tx) Commit() error {
 func (t *Tx) Abort() error {
 	t.m.Lock()
 	defer t.m.Unlock()
-
-	t.m.RemoveTx(t)
+	defer t.m.RemoveTx(t)
 
 	return nil
 }

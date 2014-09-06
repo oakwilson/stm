@@ -43,9 +43,25 @@ func (m *Manager) AddTx(t *Tx) {
 }
 
 func (m *Manager) RemoveTx(t *Tx) {
-	for i, _t := range m.txs {
+	i := 0
+	for {
+		_t := m.txs[i]
+
 		if _t == t {
-			m.txs = append(m.txs[0:i], m.txs[i+1:]...)
+			m.txs[i] = m.txs[len(m.txs)-1]
+			m.txs[len(m.txs)-1] = nil
+			m.txs = m.txs[0 : len(m.txs)-1]
+		} else {
+			i++
+
+			if t.completed {
+				_t.laterLock.Lock()
+				_t.later = append(_t.later, t)
+				_t.laterLock.Unlock()
+			}
+		}
+
+		if i >= len(m.txs) {
 			break
 		}
 	}
