@@ -1,77 +1,33 @@
 package main
 
 import (
-	"os"
-	"sync"
+	"log"
 
-	"github.com/demizer/go-elog"
 	"oakwilson.com/p/stm"
 	"oakwilson.com/p/stm/backend/byteslice"
 )
 
+func must(args ...interface{}) {
+	if args[len(args)-1] != nil {
+		panic(args[len(args)-1])
+	}
+}
+
 func main() {
-	log.SetLevel(log.LEVEL_DEBUG)
+	b := make([]byte, 10)
 
-	m := stm.NewManager(byteslice.New(make([]byte, 12)))
+	log.Printf("before: %x", b)
 
-	var wg sync.WaitGroup
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
+	m := stm.NewManager(byteslice.New(b))
 
-		go func(i int) {
-			defer wg.Done()
+	t1 := m.Tx()
+	t2 := m.Tx()
 
-			t := m.Tx()
-			b := make([]byte, 4)
+	must(t1.WriteAt([]byte("xx"), 0))
+	must(t2.WriteAt([]byte("yy"), 2))
 
-			if _, err := t.ReadAt(b, 0); err != nil {
-				log.Errorf("error: %s\n", err.Error())
-				t.Abort()
-				return
-			}
+	must(t1.Commit())
+	must(t2.Commit())
 
-			if _, err := t.WriteAt([]byte("abcd"), int64((i+1)*4)); err != nil {
-				log.Errorf("error: %s\n", err.Error())
-				t.Abort()
-				return
-			}
-
-			if err := t.Commit(); err != nil {
-				log.Errorf("error: %s\n", err.Error())
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	t := m.Tx()
-	b := make([]byte, 12)
-
-	log.Debugf("%#v\n", m)
-
-	if _, err := t.ReadAt(b, 0); err != nil {
-		log.Errorf("error: %s\n", err.Error())
-		os.Exit(1)
-	} else {
-		log.Debugf("read: %x\n", b)
-	}
-
-	if _, err := t.WriteAt([]byte("0000"), 0); err != nil {
-		log.Errorf("error: %s\n", err.Error())
-		os.Exit(1)
-	}
-
-	if _, err := t.ReadAt(b, 0); err != nil {
-		log.Errorf("error: %s\n", err.Error())
-		os.Exit(1)
-	} else {
-		log.Debugf("read: %x\n", b)
-	}
-
-	if err := t.Commit(); err != nil {
-		log.Errorf("error: %s\n", err.Error())
-		os.Exit(1)
-	}
-
-	log.Debugf("finished: %x\n", b)
+	log.Printf("after: %x", b)
 }
